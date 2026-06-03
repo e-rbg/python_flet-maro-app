@@ -100,7 +100,7 @@ def get_dashboard_data(search_query: str = "") -> List[dict]:
 def get_all_provinces() -> List[Province]:
     with get_db_session() as session:
         res = session.query(Province).order_by(Province.name).all()
-        session.expunge_all()  # <-- FIX: Safely detaches elements before session terminates
+        session.expunge_all()  
         return res
 
 
@@ -109,7 +109,7 @@ def get_all_municipalities_global() -> List[Municipality]:
         res = session.query(Municipality).options(
             joinedload(Municipality.province)
         ).order_by(Municipality.name).all()
-        session.expunge_all()  # <-- FIX: Safely detaches elements before session terminates
+        session.expunge_all()  
         return res
 
 
@@ -118,10 +118,11 @@ def get_all_barangays_global() -> List[Barangay]:
         res = session.query(Barangay).options(
             joinedload(Barangay.municipality).joinedload(Municipality.province)
         ).order_by(Barangay.name).all()
-        session.expunge_all()  # <-- FIX: Safely detaches elements before session terminates
+        session.expunge_all()  
         return res
 
 
+# --- Landowner Core ---
 def get_all_landowners() -> List[Landowner]:
     with get_db_session() as session:
         res = session.query(Landowner).order_by(Landowner.name).all()
@@ -129,17 +130,44 @@ def get_all_landowners() -> List[Landowner]:
         return res
 
 
-def get_all_mother_titles() -> List[MotherTitle]:
+def save_landowner(name: str, contact_info: Optional[str] = None, landowner_id: Optional[int] = None) -> Landowner:
+    """Creates a new landowner entry or updates an existing one."""
     with get_db_session() as session:
-        res = session.query(MotherTitle).options(
+        if landowner_id:
+            lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
+            if lo:
+                lo.name = name
+                lo.contact_info = contact_info
+        else:
+            lo = Landowner(name=name, contact_info=contact_info)
+            session.add(lo)
+        session.flush()
+        session.refresh(lo)
+        session.expunge_all()
+        return lo
+
+
+def delete_landowner(landowner_id: int) -> None:
+    """Removes a landowner profile from the database registry."""
+    with get_db_session() as session:
+        lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
+        if lo:
+            session.delete(lo)
+
+
+# --- Mother Title Core ---
+def get_all_mother_titles() -> List[MotherTitle]:
+    """Safely reads mother title elements along with nested child split records."""
+    with get_db_session() as session:
+        titles = session.query(MotherTitle).options(
             joinedload(MotherTitle.landowner),
+            joinedload(MotherTitle.individual_titles).joinedload(IndividualTitle.arb), # Added for detailed hierarchy tracking
             joinedload(MotherTitle.barangay).joinedload(Barangay.municipality).joinedload(Municipality.province)
         ).all()
-        session.expunge_all()
-        return res
+        session.expunge_all() # Fixed: Safely unbinds variables prior to session cleanup
+        return titles
 
 
-# --- Mother Title CRUD ---
 def save_mother_title(
     title_number: str, landowner_id: int, area: float, lot_number: str,
     survey_number: str, mode_of_acquisition: str, raw_text: str, lines: str,
@@ -228,40 +256,3 @@ def delete_barangay(barangay_id: int) -> None:
         bar = session.query(Barangay).filter(Barangay.id == barangay_id).first()
         if bar:
             session.delete(bar)
-
-
-def get_all_municipalities_with_province() -> List[Municipality]:
-    with get_db_session() as session:
-        res = session.query(Municipality).options(
-            joinedload(Municipality.province)
-        ).order_by(Municipality.name).all()
-        session.expunge_all()
-        return res
-    
-
-
-
-# Note: get_all_landowners() is already in your database.py file!
-
-def save_landowner(name: str, contact_info: Optional[str] = None, landowner_id: Optional[int] = None) -> Landowner:
-    """Creates a new landowner entry or updates an existing one."""
-    with get_db_session() as session:
-        if landowner_id:
-            lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
-            if lo:
-                lo.name = name
-                lo.contact_info = contact_info
-        else:
-            lo = Landowner(name=name, contact_info=contact_info)
-            session.add(lo)
-        session.flush()
-        session.refresh(lo)
-        session.expunge_all()
-        return lo
-
-def delete_landowner(landowner_id: int) -> None:
-    """Removes a landowner profile from the database registry."""
-    with get_db_session() as session:
-        lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
-        if lo:
-            session.delete(lo)

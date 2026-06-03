@@ -12,6 +12,15 @@ class MotherTitlesView(ft.Container):
         self.on_view_change = on_view_change 
         self.editing_title_id = None
         
+        # --- Cached Database Memory (Loaded ONCE in did_mount to prevent slow search lag) ---
+        self.landowners = []
+        self.municipalities = []
+        self.all_barangays = []
+        self.mother_titles = []
+
+        # --- Reusable SnackBar ---
+        self.snack_bar = ft.SnackBar(content=ft.Text(""))
+
         # --- Search Bar Control ---
         self.search_input = ft.TextField(
             label="Search Mother Titles...",
@@ -78,18 +87,19 @@ class MotherTitlesView(ft.Container):
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-        # --- Detail Window Dialog ---
+        # --- Detail Window Dialog (The separate window popup) ---
         self.details_view = MotherTitleDetailsView()
+        
         self.details_dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Mother Title Hierarchy Explorer", size=18, weight=ft.FontWeight.BOLD),
+            title=ft.Text("Property Structural Profile Tracking"),
             content=ft.Container(
-                width=1100,
-                height=720,
-                content=self.details_view,
-                padding=0,
+                content=ft.Text("No record selected."), 
+                width=950, 
+                height=500
             ),
-            actions=[ft.TextButton("Close", on_click=self.close_details_dialog)],
+            actions=[
+                ft.TextButton("Close View", on_click=self.close_details_dialog)
+            ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
@@ -106,31 +116,7 @@ class MotherTitlesView(ft.Container):
             rows=[]
         )
 
-    def handle_navigate_to_details(self, mt):
-        if not mt:
-            return
-
-        self.details_dialog.title.value = f"Mother Title Hierarchy: {mt.title_number or 'Details'}"
-        self.details_view.preload_titles_dropdown()
-        self.details_view.load_specific_title(mt.id)
-        self.details_dialog.open = True
-        self.page.update()
-
-    def close_details_dialog(self, e=None):
-        self.details_dialog.open = False
-        self.page.update()
-
-    def did_mount(self):
-        if self.form_dialog not in self.page.overlay:
-            self.page.overlay.append(self.form_dialog)
-        if self.details_dialog not in self.page.overlay:
-            self.page.overlay.append(self.details_dialog)
-        
-        params = self.page.route.split("?id=")[-1] if "?id=" in self.page.route else None
-        if params and params.isdigit():
-            self.title_selector.value = params
-            self.handle_title_selected(None) # Trigger auto-load
-
+        # --- Build Initial Layout Content Matrix ---
         header_actions = ft.Row([
             ft.Column([
                 ft.Text("Mother Titles Repository", size=26, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_GREY_800),
@@ -145,7 +131,6 @@ class MotherTitlesView(ft.Container):
             )
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-        # Inject the search bar row right beneath the header actions layout section
         self.content = ft.Column([
             header_actions,
             ft.Divider(height=15, color=ft.colors.TRANSPARENT),
@@ -157,10 +142,125 @@ class MotherTitlesView(ft.Container):
         scroll=ft.ScrollMode.ALWAYS
         )
 
+    # 🚀 FIX: Lifecycle Mount Method to inject overlays safely into memory canvas
+    def did_mount(self):
+        if self.form_dialog not in self.page.overlay:
+            self.page.overlay.append(self.form_dialog)
+        if self.details_dialog not in self.page.overlay:
+            self.page.overlay.append(self.details_dialog)
+        if self.snack_bar not in self.page.overlay:
+            self.page.overlay.append(self.snack_bar)
+        
+        # Hydrate memory cash values safely
+        self.preload_database_cache()
         self.refresh_ui_components()
 
-    # --- DIALOG LIFECYCLE MANAGEMENT ---
+    def close_details_dialog(self, e):
+        """Safely dismisses the view details modal popup."""
+        self.details_dialog.open = False
+        self.page.update()
 
+    def handle_navigate_to_details(self, mt):
+        if not mt:
+            return
+
+        # 1. Resolve geographic address text safely
+        if mt.barangay and mt.barangay.municipality:
+            prov_name = mt.barangay.municipality.province.name if mt.barangay.municipality.province else "Unknown Province"
+            location_str = f"Brgy. {mt.barangay.name}, {mt.barangay.municipality.name}, {prov_name}"
+        elif mt.barangay:
+            location_str = f"Brgy. {mt.barangay.name} (Unlinked)"
+        else:
+            location_str = "Geographic Location Unrecorded"
+
+        # 2. Build explicit content structure grid
+        grid_content = ft.Row([
+            # Left Panel: Core Registry Metadata Information Card
+            ft.Container(
+                expand=5,
+                content=ft.Column([
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.PERSON_PIN_ROUNDED, color=ft.colors.BLUE_700), 
+                        title=ft.Text(f"{mt.landowner.name if mt.landowner else 'Unknown Landowner'}", size=15, weight=ft.FontWeight.W_500), 
+                        subtitle=ft.Text("Registered Legal Estate Holder")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.LANDSCAPE_ROUNDED, color=ft.colors.GREEN_700), 
+                        title=ft.Text(f"Total Footprint: {mt.area_hectares} Hectares", size=15), 
+                        subtitle=ft.Text("Spatial Scale Calculations")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.ASSIGNMENT_ROUNDED, color=ft.colors.ORANGE_700), 
+                        title=ft.Text(f"Acquisition Strategy: {mt.mode_of_acquisition or '—'}", size=15), 
+                        subtitle=ft.Text("Legal Tenancy Handover Mandate")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.MAP_ROUNDED, color=ft.colors.PURPLE_700), 
+                        title=ft.Text(f"Lot {mt.lot_number or '—'} | Survey {mt.survey_number or '—'}", size=15), 
+                        subtitle=ft.Text("Cadastral Identity Blueprint Specs")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.PIN_DROP_ROUNDED, color=ft.colors.RED_700), 
+                        title=ft.Text(location_str, size=14, color=ft.colors.BLUE_GREY_700), 
+                        subtitle=ft.Text("Geographical Address Matrix")
+                    ),
+                ], spacing=2, scroll=ft.ScrollMode.ADAPTIVE)
+            ),
+            
+            # Separation line partition
+            ft.VerticalDivider(width=1, color=ft.colors.GREY_300),
+            
+            # Right Panel: Large Descriptive Narrative Logs
+            ft.Container(
+                expand=6,
+                padding=ft.padding.only(left=10),
+                content=ft.Column([
+                    ft.TextField(
+                        label="Technical Metadata / Original Deed Narrative", 
+                        value=mt.raw_text or "No narrative technical descriptions logged.",
+                        multiline=True, 
+                        read_only=True, 
+                        min_lines=4, 
+                        max_lines=5,
+                    ),
+                    ft.Container(height=5),
+                    ft.TextField(
+                        label="Boundary Coordinates / Line Traversal Mapping", 
+                        value=mt.lines or "No boundary lines traversal mapped.",
+                        multiline=True, 
+                        read_only=True, 
+                        min_lines=4, 
+                        max_lines=5,
+                    )
+                ], alignment=ft.MainAxisAlignment.START, spacing=10)
+            )
+        ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
+
+        # 3. Encapsulate into a scrollable structural master shell frame box
+        dialog_body = ft.Container(
+            content=grid_content,
+            width=950,
+            height=480,
+            padding=10
+        )
+
+        # 4. Bind changes directly into your dialog layout references
+        self.details_dialog.title = ft.Text(f"OCT / TCT Master Hierarchy: {mt.title_number or 'Details'}", size=20, weight=ft.FontWeight.BOLD)
+        self.details_dialog.content = dialog_body
+        
+        # 5. Open and commit updates to the screen active tree panel layout
+        self.details_dialog.open = True
+        self.page.update()
+
+    # --- DATABASE PRELOADING ---
+    def preload_database_cache(self):
+        """Loads static variables safely to memory once so search rendering is instant."""
+        self.landowners = get_all_landowners()
+        self.municipalities = get_all_municipalities_global()
+        self.all_barangays = get_all_barangays_global()
+        self.mother_titles = get_all_mother_titles()
+
+    # --- DIALOG LIFECYCLE MANAGEMENT ---
     def open_add_dialog(self, e):
         self.clear_form_fields()
         self.form_dialog.title.value = "Register New Mother Title Data"
@@ -174,13 +274,11 @@ class MotherTitlesView(ft.Container):
         self.page.update()
 
     # --- SEARCH & FILTER HANDLER ---
-
     def handle_search_changed(self, e):
-        """Triggers a table recalculation layout whenever the text changes."""
+        """Filters the table instantly without refreshing data from disk."""
         self.refresh_ui_components()
 
     # --- DROPDOWN CASCADE LOGIC ---
-
     def handle_municipality_changed(self, e):
         if not self.mun_dropdown.value:
             self.bar_dropdown.disabled = True
@@ -197,15 +295,9 @@ class MotherTitlesView(ft.Container):
         self.page.update()
 
     # --- REFRESH CORE WITH SEARCH FILTERING ---
-
     def refresh_ui_components(self):
-        landowners = get_all_landowners()
-        self.municipalities = get_all_municipalities_global()
-        self.all_barangays = get_all_barangays_global()
-        mother_titles = get_all_mother_titles()
-
-        # Update Form Dropdowns
-        self.landowner_dropdown.options = [ft.dropdown.Option(key=str(l.id), text=l.name) for l in landowners]
+        # Update Dropdown options safely with preloaded cache data
+        self.landowner_dropdown.options = [ft.dropdown.Option(key=str(l.id), text=l.name) for l in self.landowners]
         self.mun_dropdown.options = [
             ft.dropdown.Option(
                 key=str(m.id), 
@@ -213,16 +305,16 @@ class MotherTitlesView(ft.Container):
             ) for m in self.municipalities
         ]
 
-        # Read current search text query
+        # Read search input criteria
         query = self.search_input.value.strip().lower()
 
-        # Rebuild Filtered Grid Table
+        # Rebuild layout data rows
         self.titles_table.rows.clear()
-        for mt in mother_titles:
+        for mt in self.mother_titles:
             title_num = mt.title_number.lower() if mt.title_number else ""
             owner_name = mt.landowner.name.lower() if mt.landowner else "unknown"
 
-            # Skip displaying this item if a search filter query exists and doesn't match
+            # Search Filter Trap Rule
             if query and (query not in title_num and query not in owner_name):
                 continue
 
@@ -247,7 +339,7 @@ class MotherTitlesView(ft.Container):
                                 ft.icons.VISIBILITY_ROUNDED, 
                                 icon_color=ft.colors.GREEN_700, 
                                 tooltip="View Detailed Hierarchy",
-                                on_click=lambda e, mt=mt: self.handle_navigate_to_details(mt)
+                                on_click=lambda e, title_item=mt: self.handle_navigate_to_details(title_item)
                             ),
                             ft.IconButton(ft.icons.EDIT_ROUNDED, icon_color=ft.colors.BLUE_600, on_click=lambda e, title=mt: self.handle_load_edit(title)),
                             ft.IconButton(ft.icons.DELETE_OUTLINE_ROUNDED, icon_color=ft.colors.RED_400, on_click=lambda e, id=mt.id: self.handle_delete(id)),
@@ -258,7 +350,6 @@ class MotherTitlesView(ft.Container):
         self.update()
 
     # --- TRANSACTION HANDLERS ---
-
     def handle_load_edit(self, mt):
         self.editing_title_id = mt.id
         self.title_input.value = mt.title_number
@@ -267,6 +358,7 @@ class MotherTitlesView(ft.Container):
         self.lot_input.value = mt.lot_number or ""
         self.survey_input.value = mt.survey_number or ""
         self.mode_dropdown.value = mt.mode_of_acquisition or None
+        
         self.raw_text_input.value = mt.raw_text or ""
         self.lines_input.value = mt.lines or ""
 
@@ -320,11 +412,14 @@ class MotherTitlesView(ft.Container):
         self.close_form_dialog()
         self.show_snack("Mother Title records successfully updated.")
         self.clear_form_fields()
+        
+        self.preload_database_cache()
         self.refresh_ui_components()
 
     def handle_delete(self, title_id):
         delete_mother_title(title_id)
         self.show_snack("Title registration data entry purged.")
+        self.preload_database_cache()
         self.refresh_ui_components()
 
     def clear_form_fields(self):
@@ -342,5 +437,6 @@ class MotherTitlesView(ft.Container):
         self.lines_input.value = ""
 
     def show_snack(self, message):
-        self.page.overlay.append(ft.SnackBar(ft.Text(message), open=True))
+        self.snack_bar.content.value = message
+        self.snack_bar.open = True
         self.page.update()
