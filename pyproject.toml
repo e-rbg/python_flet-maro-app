@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "maro-app"
+version = "0.1.0"
+description = "Municipal Agrarian Reform Office Information System"
+authors = ["Elvon Roy B. Gervacio <elvonrobgervacio@gmail.com>"]
+readme = "README.md"
+packages = [{include = "maro_app"}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+flet = "^0.25.0"
+sqlalchemy = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
