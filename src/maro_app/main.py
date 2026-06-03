@@ -5,6 +5,7 @@ from src.maro_app.views.mother_titles import MotherTitlesView
 from src.maro_app.views.location_management import LocationManagementView
 from src.maro_app.views.landowners import LandownersView
 from src.maro_app.views.mother_title_details import MotherTitleDetailsView
+from src.maro_app.views.individual_titles import IndividualTitlesView
 
 def main(page: ft.Page):
     page.title = "MARO App | Information System for Land Management and Agrarian Reform in Davao de Oro"
@@ -12,18 +13,17 @@ def main(page: ft.Page):
     page.window_height = 850
     page.theme_mode = ft.ThemeMode.LIGHT
 
+    # Ensure SQLite context data tables exist
     init_db()
 
-    # Track sidebar expansion state and selected screen index
+    # App States
     sidebar_expanded = True
     current_index = 0
 
-    # Main content display slot
+    # Content Slot Area
     content_area = ft.Container(content=DashboardView(), expand=True, padding=20)
 
-    # ---------------------------------------------------------
-    # 1. UI Elements Declarations (Declared first to avoid NameErrors)
-    # ---------------------------------------------------------
+    # --- Header Layout & Toggle Infrastructure ---
     app_logo = ft.Row(
         [
             ft.Icon(ft.icons.ADD_HOME_ROUNDED, color=ft.colors.BLUE_700, size=24), 
@@ -32,7 +32,6 @@ def main(page: ft.Page):
         spacing=8
     )
     
-    # We define the toggle function reference below, so we'll assign it right after defining the function
     toggle_btn = ft.IconButton(
         icon=ft.icons.MENU_ROUNDED, 
         icon_color=ft.colors.BLUE_GREY_600,
@@ -46,89 +45,77 @@ def main(page: ft.Page):
 
     nav_buttons = ft.Column(spacing=4)
 
+    # --- Precise View Mapping Core ---
+    # Index keys mapping perfectly to your menu array sequence items
+    VIEW_MAPPING = {
+        0: lambda: DashboardView(),
+        1: lambda: MotherTitlesView(on_view_change=navigate_to_details),
+        2: lambda: LocationManagementView(),
+        3: lambda: LandownersView(),
+        4: lambda: IndividualTitlesView(),
+        5: lambda: MotherTitleDetailsView()  # Hidden details panel index route
+    }
+
     def navigate_to_details(title_id):
+        """Callback to switch directly into the contextual Mother Title inspector."""
         print(f"Navigating to details for {title_id}")
-        current_index = 4
-        if isinstance(content_area.content, MotherTitleDetailsView):
-            content_area.content.load_specific_title(title_id)
-        else:
-            content_area.content = MotherTitleDetailsView()
-            content_area.content.load_specific_title(title_id)
+        
+        # Explicitly route to details panel index safely
+        content_area.content = VIEW_MAPPING[5]()
+        content_area.content.load_specific_title(title_id)
+        
+        # Reset selection highlighters since Details isn't an explicit sidebar row item
+        nonlocal current_index
+        current_index = 5
+        render_nav_items()
         page.update()
 
-    def navigate_to(index):
+    def navigate_to(index: int):
+        """Handles top-level view shifting and navigation row highlight updates."""
         nonlocal current_index
         current_index = index
 
-        for i, wrapper in enumerate(nav_buttons.controls):
-            is_selected = i == current_index
-            container = wrapper.content
-            container.content.controls[0].color = ft.colors.BLUE_700 if is_selected else ft.colors.BLUE_GREY_400
-            if len(container.content.controls) > 1:
-                container.content.controls[1].color = ft.colors.BLUE_700 if is_selected else ft.colors.BLUE_GREY_700
-                container.content.controls[1].weight = ft.FontWeight.BOLD if is_selected else ft.FontWeight.NORMAL
-            container.bgcolor = ft.colors.BLUE_100 if is_selected else ft.colors.TRANSPARENT
+        # Safe programmatic redraw instead of rigid control index mutations
+        render_nav_items()
 
-        if index == 0:
-            content_area.content = DashboardView()
-        elif index == 1:
-            content_area.content = MotherTitlesView(on_view_change=navigate_to_details)
-        elif index == 2:
-            content_area.content = LocationManagementView()
-        elif index == 3:
-            content_area.content = LandownersView()
-        elif index == 4:
-            content_area.content = MotherTitleDetailsView()
+        # Resolve correct constructor execution
+        if index in VIEW_MAPPING:
+            content_area.content = VIEW_MAPPING[index]()
         else:
             content_area.content = ft.Container(
-                content=ft.Text(f"Management View {index} Coming Soon...", size=18, color=ft.colors.GREY_500),
+                content=ft.Text(f"View {index} Under Maintenance...", size=18, color=ft.colors.GREY_500),
                 alignment=ft.alignment.center,
             )
         page.update()
 
-    # ---------------------------------------------------------
-    # 2. Sidebar Navigation Logic & Interaction Functions
-    # ---------------------------------------------------------
     def toggle_sidebar(e):
         nonlocal sidebar_expanded
         sidebar_expanded = not sidebar_expanded
         
-        # Animate container box constraints
+        # Smoothly expand or collapse the structural container shell
         sidebar_box.width = 240 if sidebar_expanded else 70
-        
-        # Update alignments & text visibility dynamically
         logo_row.alignment = ft.MainAxisAlignment.SPACE_BETWEEN if sidebar_expanded else ft.MainAxisAlignment.CENTER
         app_logo.visible = sidebar_expanded
         
-        # Rebuild navigation item lines to fit state constraints
         render_nav_items()
         page.update()
 
-    # Assign the click handler to the toggle button now that the function is defined
     toggle_btn.on_click = toggle_sidebar
 
-    def route_change(route):
-        page.views.clear()
-        if page.route == "/mother_title_details":
-            target_id = page.session.get("target_title_id")
-            details_view = MotherTitleDetailsView()
-            details_view.load_specific_title(target_id)
-            page.add(details_view)
-        # ... handle other routes
-
     def render_nav_items():
+        """Redraws sidebar elements cleanly based on position and active state indexes."""
         nav_buttons.controls.clear()
         
         menu_items = [
             (ft.icons.DASHBOARD_ROUNDED, "Dashboard"),
             (ft.icons.LAYERS_ROUNDED, "Mother Titles"),
-            (ft.icons.SETTINGS_ACCESSIBILITY_ROUNDED, "Location Settings"),  # <-- Add this line
+            (ft.icons.SETTINGS_ACCESSIBILITY_ROUNDED, "Location Settings"),
             (ft.icons.PEOPLE_ROUNDED, "Landowners"),
-            (ft.icons.CARD_MEMBERSHIP_ROUNDED, "Individual Titles"),
+            (ft.icons.CARD_MEMBERSHIP_ROUNDED, "Individual Titles"), # Row Index 4 matches view map perfectly!
         ]
 
         for idx, (icon_name, label_text) in enumerate(menu_items):
-            is_active = idx == current_index
+            is_active = (idx == current_index)
             
             row_controls = [
                 ft.Icon(
@@ -153,6 +140,8 @@ def main(page: ft.Page):
                 item_alignment = ft.MainAxisAlignment.CENTER
                 item_padding = ft.padding.symmetric(vertical=12)
 
+            # Using InkWell gives modern splash responses when buttons are clicked
+            #  The correct Flet implementation
             nav_item = ft.Container(
                 content=ft.Row(
                     controls=row_controls,
@@ -161,21 +150,17 @@ def main(page: ft.Page):
                 ),
                 padding=item_padding,
                 border_radius=8,
-                bgcolor=ft.colors.BLUE_100 if is_active else ft.colors.TRANSPARENT,
+                bgcolor=ft.colors.BLUE_50 if is_active else ft.colors.TRANSPARENT,
+                # Move the click event handler directly onto the Container
+                on_click=lambda e, i=idx: navigate_to(i)
+                
             )
+            nav_buttons.controls.append(nav_item)
 
-            interactive_wrapper = ft.GestureDetector(
-                content=nav_item,
-                mouse_cursor=ft.MouseCursor.CLICK,
-                on_tap=lambda e, i=idx: navigate_to(i),
-            )
-            
-            nav_buttons.controls.append(interactive_wrapper)
-
-    # Initialize menu rows
+    # Initial Sidebar Menu Synthesis
     render_nav_items()
 
-    # Master Sidebar Box Structure
+    # Master Left Sidebar Panel
     sidebar_box = ft.Container(
         width=240,
         bgcolor=ft.colors.GREY_50,
@@ -191,7 +176,7 @@ def main(page: ft.Page):
         )
     )
 
-    # Render Screen Canvas View
+    # Mount UI Canvas Elements onto Page Surface
     page.add(
         ft.Row(
             [

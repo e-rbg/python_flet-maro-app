@@ -1,3 +1,5 @@
+from sqlite3 import Date
+
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Table
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text
@@ -89,11 +91,20 @@ class AgrarianReformBeneficiary(Base):
 class IndividualTitle(Base):
     __tablename__ = "individual_titles"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title_number = Column(String, nullable=False, unique=True)
-    allocated_area = Column(Float, nullable=False)
+    id = Column(String, primary_key=True)
+    title_number = Column(String, nullable=False)
+    mother_title_id = Column(String, ForeignKey("mother_titles.id"))
     
-    mother_title_id = Column(Integer, ForeignKey("mother_titles.id", ondelete="CASCADE"), nullable=False)
+    # 🛠️ Make sure this exactly matches "cloa_type"
+    cloa_type = Column(String, nullable=False, default="Individual") 
+    
+    area = Column(Float, nullable=False)
+    survey_number = Column(String, nullable=True)
+    date_registered = Column(Date, nullable=True)
+    date_distributed = Column(Date, nullable=True)
+    raw_text = Column(Text, nullable=True)
+    lines = Column(Text, nullable=True)
+    status = Column(String, default="active")
     arb_id = Column(Integer, ForeignKey("arbs.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships

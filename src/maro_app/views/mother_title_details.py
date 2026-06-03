@@ -31,9 +31,9 @@ class MotherTitleDetailsView(ft.Container):
         # Assign values directly to tracking variables
         self.title_text.value = f"OCT / TCT No: {mt.title_number or 'N/A'}"
         self.owner_text.value = f"{mt.landowner.name if mt.landowner else 'Unknown Landowner Record'}"
-        self.area_text.value = f"Total Footprint: {mt.area_hectares} Hectares"
-        self.acquisition_text.value = f"Acquisition Mandate Strategy: {mt.mode_of_acquisition or '—'}"
-        self.lot_survey_text.value = f"Cadastral Parameters: Lot {mt.lot_number or '—'} | Survey {mt.survey_number or '—'}"
+        self.area_text.value = f"{mt.area_hectares} Hectares"
+        self.acquisition_text.value = f"{mt.mode_of_acquisition or '—'}"
+        self.lot_survey_text.value = f"{mt.lot_number or '—'} | Survey {mt.survey_number or '—'}"
         
         # Safely resolve deep nested geography paths
         if mt.barangay and mt.barangay.municipality:
@@ -60,27 +60,27 @@ class MotherTitleDetailsView(ft.Container):
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.PERSON_PIN_ROUNDED, color=ft.colors.BLUE_700, size=28), 
                             title=self.owner_text, 
-                            subtitle=ft.Text("Registered Legal Estate Holder")
+                            subtitle=ft.Text("Registered Landowner")
                         ),
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.LANDSCAPE_ROUNDED, color=ft.colors.GREEN_700, size=28), 
                             title=self.area_text, 
-                            subtitle=ft.Text("Spatial Scale Calculations")
+                            subtitle=ft.Text("Area")
                         ),
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.ASSIGNMENT_ROUNDED, color=ft.colors.ORANGE_700, size=28), 
                             title=self.acquisition_text, 
-                            subtitle=ft.Text("Legal Tenancy Handover Mandate")
+                            subtitle=ft.Text("Mode of Acquisition")
                         ),
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.MAP_ROUNDED, color=ft.colors.PURPLE_700, size=28), 
                             title=self.lot_survey_text, 
-                            subtitle=ft.Text("Cadastral Identity Blueprint Specs")
+                            subtitle=ft.Text("Lot Number & Survey Number")
                         ),
                         ft.ListTile(
                             leading=ft.Icon(ft.icons.PIN_DROP_ROUNDED, color=ft.colors.RED_700, size=28), 
                             title=self.location_text, 
-                            subtitle=ft.Text("Geographical Jurisdictional Address Matrix")
+                            subtitle=ft.Text("Location")
                         ),
                     ], spacing=10)
                 ),

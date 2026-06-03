@@ -182,27 +182,27 @@ class MotherTitlesView(ft.Container):
                     ft.ListTile(
                         leading=ft.Icon(ft.icons.PERSON_PIN_ROUNDED, color=ft.colors.BLUE_700), 
                         title=ft.Text(f"{mt.landowner.name if mt.landowner else 'Unknown Landowner'}", size=15, weight=ft.FontWeight.W_500), 
-                        subtitle=ft.Text("Registered Legal Estate Holder")
+                        subtitle=ft.Text("Registered Landowner")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.icons.LANDSCAPE_ROUNDED, color=ft.colors.GREEN_700), 
-                        title=ft.Text(f"Total Footprint: {mt.area_hectares} Hectares", size=15), 
-                        subtitle=ft.Text("Spatial Scale Calculations")
+                        title=ft.Text(f"{mt.area_hectares} Hectares", size=15), 
+                        subtitle=ft.Text("Area")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.icons.ASSIGNMENT_ROUNDED, color=ft.colors.ORANGE_700), 
-                        title=ft.Text(f"Acquisition Strategy: {mt.mode_of_acquisition or '—'}", size=15), 
-                        subtitle=ft.Text("Legal Tenancy Handover Mandate")
+                        title=ft.Text(f"{mt.mode_of_acquisition or '—'}", size=15), 
+                        subtitle=ft.Text("Mode of Acquisition")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.icons.MAP_ROUNDED, color=ft.colors.PURPLE_700), 
-                        title=ft.Text(f"Lot {mt.lot_number or '—'} | Survey {mt.survey_number or '—'}", size=15), 
-                        subtitle=ft.Text("Cadastral Identity Blueprint Specs")
+                        title=ft.Text(f"{mt.lot_number or '—'} | Survey {mt.survey_number or '—'}", size=15), 
+                        subtitle=ft.Text("Lot & Survey Details")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.icons.PIN_DROP_ROUNDED, color=ft.colors.RED_700), 
                         title=ft.Text(location_str, size=14, color=ft.colors.BLUE_GREY_700), 
-                        subtitle=ft.Text("Geographical Address Matrix")
+                        subtitle=ft.Text("Location")
                     ),
                 ], spacing=2, scroll=ft.ScrollMode.ADAPTIVE)
             ),
@@ -245,7 +245,7 @@ class MotherTitlesView(ft.Container):
         )
 
         # 4. Bind changes directly into your dialog layout references
-        self.details_dialog.title = ft.Text(f"OCT / TCT Master Hierarchy: {mt.title_number or 'Details'}", size=20, weight=ft.FontWeight.BOLD)
+        self.details_dialog.title = ft.Text(f"Title Number: {mt.title_number or 'Details'}", size=20, weight=ft.FontWeight.BOLD)
         self.details_dialog.content = dialog_body
         
         # 5. Open and commit updates to the screen active tree panel layout

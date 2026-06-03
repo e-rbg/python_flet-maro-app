@@ -1,6 +1,8 @@
 import os
 from contextlib import contextmanager
 from typing import List, Optional
+from datetime import datetime
+import uuid
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, joinedload
@@ -49,6 +51,19 @@ def get_db_session():
         session.close()
 
 
+# --- Internal Helper Utilities ---
+def _parse_date(date_input) -> Optional[datetime.date]:
+    """Safely normalizes incoming front-end strings or objects into Python date types."""
+    if not date_input:
+        return None
+    if isinstance(date_input, str):
+        try:
+            return datetime.strptime(date_input.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return date_input
+
+
 # --- Dashboard Data ---
 def get_dashboard_data(search_query: str = "") -> List[dict]:
     """Fetch combined records across Landowners, Mother Titles, Individual Titles, and ARBs."""
@@ -67,7 +82,7 @@ def get_dashboard_data(search_query: str = "") -> List[dict]:
                 (Landowner.name.like(search_filter)) |
                 (AgrarianReformBeneficiary.first_name.like(search_filter)) |
                 (AgrarianReformBeneficiary.last_name.like(search_filter)) |
-                (IndividualTitle.title_number.like(search_filter))
+                (IndividualTitle.title_number.like(search_filter)) # 👈 You used title_number here!
             )
 
         results = query.all()
@@ -90,7 +105,7 @@ def get_dashboard_data(search_query: str = "") -> List[dict]:
                         "mother_title": mt.title_number,
                         "mother_area": f"{mt.area_hectares} ha",
                         "individual_title": it.title_number,
-                        "allocated_area": f"{it.allocated_area} ha",
+                        "allocated_area": f"{it.area} ha",
                         "arb": it.arb.full_name if it.arb else "Unassigned"
                     })
         return records
@@ -131,7 +146,6 @@ def get_all_landowners() -> List[Landowner]:
 
 
 def save_landowner(name: str, contact_info: Optional[str] = None, landowner_id: Optional[int] = None) -> Landowner:
-    """Creates a new landowner entry or updates an existing one."""
     with get_db_session() as session:
         if landowner_id:
             lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
@@ -148,7 +162,6 @@ def save_landowner(name: str, contact_info: Optional[str] = None, landowner_id: 
 
 
 def delete_landowner(landowner_id: int) -> None:
-    """Removes a landowner profile from the database registry."""
     with get_db_session() as session:
         lo = session.query(Landowner).filter(Landowner.id == landowner_id).first()
         if lo:
@@ -157,14 +170,13 @@ def delete_landowner(landowner_id: int) -> None:
 
 # --- Mother Title Core ---
 def get_all_mother_titles() -> List[MotherTitle]:
-    """Safely reads mother title elements along with nested child split records."""
     with get_db_session() as session:
         titles = session.query(MotherTitle).options(
             joinedload(MotherTitle.landowner),
-            joinedload(MotherTitle.individual_titles).joinedload(IndividualTitle.arb), # Added for detailed hierarchy tracking
+            joinedload(MotherTitle.individual_titles).joinedload(IndividualTitle.arb),
             joinedload(MotherTitle.barangay).joinedload(Barangay.municipality).joinedload(Municipality.province)
         ).all()
-        session.expunge_all() # Fixed: Safely unbinds variables prior to session cleanup
+        session.expunge_all() 
         return titles
 
 
@@ -256,3 +268,77 @@ def delete_barangay(barangay_id: int) -> None:
         bar = session.query(Barangay).filter(Barangay.id == barangay_id).first()
         if bar:
             session.delete(bar)
+
+
+# --- Individual/Resultant Titles Core ---
+def get_all_individual_titles() -> List[IndividualTitle]:
+    """Fetches all Individual splits cleanly decoupled using session wrapper."""
+    with get_db_session() as session:
+        res = (
+            session.query(IndividualTitle)
+            .options(joinedload(IndividualTitle.mother_title))
+            .all()
+        )
+        session.expunge_all()
+        return res
+
+
+def save_individual_title(
+    title_number: str, mother_title_id: str, cloa_type: str, area: float, 
+    survey_number: Optional[str] = None, date_registered = None, 
+    date_distributed = None, raw_text: Optional[str] = None, 
+    lines: Optional[str] = None, status: str = 'active', 
+    title_id: Optional[str] = None
+) -> IndividualTitle:
+    """Inserts or modifies an Individual title using the consolidated session manager."""
+    parsed_reg = _parse_date(date_registered)
+    parsed_dist = _parse_date(date_distributed)
+
+    # Cast string representations to clean UUID strings if necessary
+    m_title_uuid = str(mother_title_id) if mother_title_id else None
+
+    with get_db_session() as session:
+        if title_id:
+            rt = session.query(IndividualTitle).filter(IndividualTitle.id == str(title_id)).first()
+            if rt:
+                rt.title_number = title_number
+                rt.mother_title_id = m_title_uuid
+                rt.cloa_type = cloa_type
+                rt.area = area
+                rt.survey_number = survey_number
+                rt.date_registered = parsed_reg
+                rt.date_distributed = parsed_dist
+                rt.raw_text = raw_text
+                rt.lines = lines
+                rt.status = status
+        else:
+            rt = IndividualTitle(
+                id=str(uuid.uuid4()),
+                title_number=title_number,
+                mother_title_id=m_title_uuid,
+                cloa_type=cloa_type,
+                area=area,
+                survey_number=survey_number,
+                date_registered=parsed_reg,
+                date_distributed=parsed_dist,
+                raw_text=raw_text,
+                lines=lines,
+                status=status
+            )
+            session.add(rt)
+        
+        session.flush()
+        if rt:
+            session.refresh(rt)
+        session.expunge_all()
+        return rt
+
+
+def delete_individual_title(title_id: str) -> bool:
+    """Removes an Individual title tracking marker safely via uniform session contexts."""
+    with get_db_session() as session:
+        rt = session.query(IndividualTitle).filter(IndividualTitle.id == str(title_id)).first()
+        if rt:
+            session.delete(rt)
+            return True
+        return False
